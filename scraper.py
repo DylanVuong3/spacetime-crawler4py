@@ -1,7 +1,31 @@
 import re
+import PartA
+import sys
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+
+crawledURL = []
 
 def scraper(url, resp):
+	if (is_valid(url)):
+		try:
+			if (resp.status == 200):
+				with open(resp.raw_response.content) as fp:
+					soup = BeautifulSoup(fp, 'html.parser')
+				
+				text = soup.get_text()
+
+				tokens = tokenize(text)
+				freq = computeWordFrequencies(tokens)
+				printFrequencies(freq)
+
+			else:
+				return resp.error
+
+		except Exception as e:
+			print(f"An unexpected error has occured: {e}")
+			sys.exit(1)
+
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
@@ -15,16 +39,34 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+   	
+	with open(resp.raw_response.content) as fp:
+		soup = BeautifulSoup(fp, 'html.parser')
+
+	subdomains = []
+
+	for link in soup.find_all('a'):
+		subdomains.append(link.get('href'))
+
+	print(len(subdomains))
+
+	return subdomains
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
     try:
+		if url in crawledURL:
+			return False
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
+		if parsed.domain not in set([".ics.uci.edu/", ".cs.uci.edu/", ".informatics.uci.edu/", ".stat.uci.edu/"]):
+			return False
+
+		crawledURL.append(url)
+
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
