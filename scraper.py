@@ -1,5 +1,4 @@
 import re
-import PartA
 from urllib.parse import urlparse, urljoin, urldefrag
 from collections import defaultdict
 from bs4 import BeautifulSoup
@@ -12,7 +11,7 @@ WORD_FREQUENCIES = defaultdict(int)
 SUBDOMAINS = defaultdict(set)
 FIFTY_COMMON_WORDS = []
 UNIQUE_PAGES = set()	
-STOP_WORDS = [
+STOP_WORDS = set([
   "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", 
   "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being", 
   "below", "between", "both", "but", "by", "can't", "cannot", "could", "couldn't", 
@@ -33,7 +32,7 @@ STOP_WORDS = [
   "while", "who", "who's", "whom", "why", "why's", "with", "won't", "would", 
   "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", 
   "yourself", "yourselves"
-]
+])
 
 # Utilized AI to guide the project on the packages that would be useful for the scraper function
 # Referenced BeautifulSoup and urllib documentation to help build
@@ -45,17 +44,19 @@ def scraper(url, resp):
 	links = []
 	
 	# Do a status check for page response
-	if resp.status != 200 or resp.raw.response is None:
+	if resp.status != 200 or resp.raw_response is None:
 		return []
 				
 	if url in UNIQUE_PAGES:
 		return []
+	
+	UNIQUE_PAGES.add(url)
 
 	# Begin parsing if the status check condition is False
 	soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
 
-	text = soup.get_text(seperator = "")
-	words = re.findall(r"[a-zA-Z0-9]", text.lower())
+	text = soup.get_text(separator = "")
+	words = re.findall(r"[a-zA-Z0-9]+", text.lower())
 	wordCount = len(words)
 
 	if wordCount < 50:
@@ -65,8 +66,8 @@ def scraper(url, resp):
 		LONGEST_PAGE["wordCount"] = wordCount
 		LONGEST_PAGE["url"] = url
 	
-	for words in words:
-		if words not in STOP_WORDS:
+	for word in words:
+		if word not in STOP_WORDS:
 			WORD_FREQUENCIES[word] += 1
 	
 	parsed = urlparse(url)
@@ -98,17 +99,13 @@ def extract_next_links(url, resp):
 	soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
 
 	# Iterate through each link found in the url
-    for link in soup.find_all('a', href=True):
-
+	for link in soup.find_all('a', href=True):
 		# Grab link, join it and defrag, and then append to links if the url is valid
 		href = link.get("href")
 
 		abs_url = urljoin(url, href)
 
-		abs_url = urldefrag(abs_url)
-
-		if url not in uniquePages:
-			uniquePages.append(abs_url)
+		abs_url, _ = urldefrag(abs_url)
 
 		if is_valid(abs_url):
 			links.append(abs_url)
@@ -120,10 +117,11 @@ def is_valid(url):
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
     try:
+		
         parsed = urlparse(url)
-
-        if parsed.scheme not in set(["http", "https"]):
-            return False
+		
+		if parsed.scheme not in set(["http", "https"]):
+			return False
 		
 		# Return false if url not apart of specified domains
 		if not(
@@ -132,6 +130,12 @@ def is_valid(url):
 			parsed.netloc.endswith("informatics.uci.edu") or
 			parsed.netloc.endswith("stat.uci.edu")
 		): 
+			return False
+
+		if parsed.query and re.search(r"(page|sort|filter|sessions)", parsed.query.lower()):
+			return False
+
+		if parsed.path.count("/") > 10:
 			return False
 
         return not re.match(
@@ -143,14 +147,6 @@ def is_valid(url):
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
-
-		if parsed.query and re.search(r"(page|sort|filter|sessions)", parsed.query.lower()):
-			return False
-
-		if parsed.path.count("/") > 10:
-			return False
-
-		return True
 
     except TypeError:
         print ("TypeError for ", parsed)
