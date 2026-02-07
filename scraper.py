@@ -116,9 +116,8 @@ def is_valid(url):
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
-    try:
-		
-        parsed = urlparse(url)
+	try:
+		parsed = urlparse(url)
 		
 		if parsed.scheme not in set(["http", "https"]):
 			return False
@@ -137,8 +136,8 @@ def is_valid(url):
 
 		if parsed.path.count("/") > 10:
 			return False
-
-        return not re.match(
+		
+		return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
@@ -148,6 +147,6 @@ def is_valid(url):
             + r"|thmx|mso|arff|rtf|jar|csv"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
 
-    except TypeError:
-        print ("TypeError for ", parsed)
-        raise
+	except TypeError:
+		print ("TypeError for ", parsed)
+		raise
