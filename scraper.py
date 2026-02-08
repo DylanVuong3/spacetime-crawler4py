@@ -131,12 +131,15 @@ def is_valid(url):
 		): 
 			return False
 
-		if parsed.query and re.search(r"(page|sort|filter|sessions)", parsed.query.lower()):
+		if "doku.php" in parsed.path.lower():
+			return False
+
+		if parsed.query and re.search(r"(page|sort|filter|sessions|do=|tab_|image=|ns=)", parsed.query.lower()):
 			return False
 
 		if parsed.path.count("/") > 10:
 			return False
-		
+
 		return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
