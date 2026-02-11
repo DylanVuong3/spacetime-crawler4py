@@ -1,8 +1,10 @@
 import re
+import atexit
 from urllib.parse import urlparse, urljoin, urldefrag
 from collections import defaultdict
 from bs4 import BeautifulSoup
 
+# Global structures to hold data for report
 LONGEST_PAGE = {
 	"url" : None,
 	"wordCount" : 0
@@ -43,10 +45,16 @@ def scraper(url, resp):
 
 	links = []
 	
-	# Do a status check for page response
+	# Reject bad responses
 	if resp.status != 200 or resp.raw_response is None:
 		return []
 				
+	# Enforce HTML only files to be processed
+	content_type = resp.raw_response.headers.get("Content-Type", "")
+	if "text/html" not in content_type:
+		return []
+
+	# Avoid duplicates
 	if url in UNIQUE_PAGES:
 		return []
 	
@@ -59,26 +67,28 @@ def scraper(url, resp):
 	words = re.findall(r"[a-zA-Z0-9]+", text.lower())
 	wordCount = len(words)
 
+	# Ignore really small pages
 	if wordCount < 50:
 		return []
 
+	# Track longest page
 	if wordCount > LONGEST_PAGE["wordCount"]:
 		LONGEST_PAGE["wordCount"] = wordCount
 		LONGEST_PAGE["url"] = url
 	
+	# Process word frequencies
 	for word in words:
+		# Only process non-stop words	
 		if word not in STOP_WORDS:
 			WORD_FREQUENCIES[word] += 1
 	
+	# Process sub domains
 	parsed = urlparse(url)
 	if parsed.netloc.endswith("uci.edu"):
 		SUBDOMAINS[parsed.netloc].add(url)
 
 	links = extract_next_links(url, resp)
-
-	valid_links = [link for link in links if is_valid(link)]
-
-	return valid_links
+	return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -93,7 +103,7 @@ def extract_next_links(url, resp):
    	
 	links = []
 
-	if resp.status != 200 or resp.raw_response is None:
+	if resp.status != 200 or resp.raw_response.content is None:
 		return links
 
 	soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
@@ -104,7 +114,8 @@ def extract_next_links(url, resp):
 		href = link.get("href")
 
 		abs_url = urljoin(url, href)
-
+		
+		# Defragment urls
 		abs_url, _ = urldefrag(abs_url)
 
 		if is_valid(abs_url):
@@ -131,18 +142,32 @@ def is_valid(url):
 		): 
 			return False
 
+		# Avoid calendar traps
+		calendar_keywords = [
+    	"calendar", "event", "events", "schedule", "agenda"
+		]
+
+		if any(keyword in parsed.path.lower() for keyword in calendar_keywords):
+			return False
+		
+		# Avoid doku php crawler trap
 		if "doku.php" in parsed.path.lower():
 			return False
 
 		if parsed.query and re.search(r"(page|sort|filter|sessions|do=|tab_|image=|ns=)", parsed.query.lower()):
 			return False
 
+		# Avoid date-based URLS, similar to calendar traps	
+		if re.search(r"/(19|20)\d{2}/\d{1,2}/\d{1,2}", parsed.path):
+			return False
+
+		# Avoid deep traversals 
 		if parsed.path.count("/") > 10:
 			return False
 
 		return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
-            + r"|png|tiff?|mid|mp2|mp3|mp4"
+            + r"|png|tiff?|mid|mp2|mp3|mp4|mpg|mpeg"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
             + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
@@ -153,3 +178,28 @@ def is_valid(url):
 	except TypeError:
 		print ("TypeError for ", parsed)
 		raise
+
+def print_report_data():
+    print("\n===== CRAWLER REPORT DATA =====")
+
+    print(f"Unique pages crawled: {len(UNIQUE_PAGES)}")
+
+    print("\nLongest page:")
+    print(f"URL: {LONGEST_PAGE['url']}")
+    print(f"Word count: {LONGEST_PAGE['wordCount']}")
+
+    print("\nTop 50 most common words:")
+    sorted_words = sorted(
+        WORD_FREQUENCIES.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )[:50]
+
+    for word, count in sorted_words:
+        print(f"{word}: {count}")
+
+    print("\nSubdomains:")
+    for subdomain in sorted(SUBDOMAINS):
+        print(f"{subdomain}, {len(SUBDOMAINS[subdomain])}")
+
+atexit.register(print_report_data)
